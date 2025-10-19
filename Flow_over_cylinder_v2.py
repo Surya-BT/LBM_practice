@@ -23,7 +23,7 @@ def calc_equilibrium(rho,u,v,tw,csqr):
 
     return eq
 
-def calc_macro(f,v,Force=[0,0]):
+def calc_macro(f,v):
 
     rho = np.zeros((nx,ny))
 
@@ -39,9 +39,6 @@ def calc_macro(f,v,Force=[0,0]):
             for i in range(9):
                 u[0,ix,iy] += v[i,0] * f[i,ix,iy]
                 u[1,ix,iy] += v[i,1] * f[i,ix,iy] 
-            
-            u[0,ix,iy] += Force[0]
-            u[1,ix,iy] += Force[1]
 
             u[0,ix,iy] /= rho[ix,iy]
             u[1,ix,iy] /= rho[ix,iy]
@@ -49,9 +46,9 @@ def calc_macro(f,v,Force=[0,0]):
     return rho,u
 
 # exercising with LBM implementation
-maxIter = 2500
-nx = 101
-ny = 51
+maxIter = 10000
+nx = 401
+ny = 101
 dely = 0.5
 H = ny-1
 print(f"H={H}")
@@ -68,9 +65,6 @@ cyl_rad = ny//9
 etaR = u_bc*cyl_rad/Re
 tau = 0.5 + etaR/csqr
 print(f"tau = {tau}")
-
-
-
 omega = delt/tau
 
 fin = np.zeros((9,nx,ny))
@@ -116,7 +110,7 @@ fin = calc_equilibrium(rho,vel,v,tw,csqr)
 for time in range(maxIter):
 
     # outflow condition
-    for i in [6,7,8]:
+    for i in range(9):
         fin[i,-1,:] = fin[i,-2,:]
 
     rho,u = calc_macro(fin,v)
@@ -134,7 +128,6 @@ for time in range(maxIter):
             sum_j += fin[j,0,iy]
 
         rho[0,iy] = 1/(1-u[0,0,iy])*(sum_i + 2*sum_j)
-
     
     # equilibrium
     feq = calc_equilibrium(rho,u,v,tw,csqr)
@@ -148,8 +141,15 @@ for time in range(maxIter):
     for ix in range(nx):
         for iy in range(ny):
             for i in range(9):
-                #fout[i,ix,iy] = 0
                 fout[i,ix,iy] = fin[i,ix,iy]*(1-omega) + feq[i,ix,iy]*omega
+
+    # alternate Implementation of bounce-back at obstacle
+    # for ix in range(nx):
+    #     for iy in range(ny):
+    #         for i in range(9):
+    #             if isn[ix,iy] == 1:
+    #                 fout[i,ix,iy] = fin[opp[i],ix,iy]
+
 
     # streaming step
     for ix in range(nx):
@@ -160,15 +160,15 @@ for time in range(maxIter):
                 ynew = iy + v[i,1]
                 # print(f"xnew={xnew}, ynew={ynew}")
 
-                if xnew < 0: xnew = nx-1
-                if xnew > nx-1: xnew = 0
+                if xnew < 0: continue
+                if xnew > nx-1: continue
                 if ynew < 0: ynew = ny-1
                 if ynew > ny-1: ynew = 0
-    
+
                 fin[i,xnew,ynew] = fout[i,ix,iy]
 
     
-    # bounce back
+    # bounce back - my understanding - with bookkeeping
     for ix in range(nx):
         for iy in range(ny):
             for i in range(9):
@@ -182,17 +182,20 @@ for time in range(maxIter):
 
                 if isn[xnew,ynew] == 1:
                     # if the particles stream into the slip wall, then apply BC.
-                    #print(f"iy={iy}")
-                    #print(f"i={i}, opp[i]={opp[i]}")
                     fin[opp[i],ix,iy] = fin[i,xnew,ynew]
     
 
 
     if (time%100==0):
-        print("saving figure")
+        print(f"iter={time}, saving figure")
         plt.clf()
-        plt.imshow(np.sqrt(u[0,:,:]**2+u[1,:,:]**2).transpose(), cmap=cm.Reds)
-        plt.savefig("myTrail/vel.{0:04d}.png".format(time//100))
+        plt.figure(figsize=(10,4),dpi=100)
+        plt.imshow(np.sqrt(u[0,:,:]**2+u[1,:,:]**2).transpose(), cmap=cm.jet)
+        plt.colorbar(shrink=0.5).set_label("Velocity Magnitude")
+        plt.gca().add_patch(plt.Circle(cyl_pos,cyl_rad,color="white"))
+        plt.savefig("myTrail_3/vel.{0:04d}.png".format(time//100))
+
+
     
 
 
